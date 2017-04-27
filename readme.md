@@ -1,8 +1,8 @@
-# Blade --- a little Javascript Util library for mobile FE developer
+# Blade --- a little Util library for mobile FE developer
 
 ---
 
-##Usage
+## Usage
 Blade is based on navie Javscript, so you can use it in two way:
 ```
 <script src="./Blade.js"></script>
@@ -12,7 +12,7 @@ or
 import Util form './Blade.js';
 ```
 
-##API File
+## Method
 获取数据类型
 ```
 
