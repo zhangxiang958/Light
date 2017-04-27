@@ -1,7 +1,40 @@
-# Blade -- a Javascript library for mobile FE developer
+# Blade --- a little Javascript Util library for mobile FE developer
 
 ---
-##HOW TO USE
+
+##Usage
+Blade is based on navie Javscript, so you can use it in two way:
+```
+<script src="./Blade.js"></script>
+
+or
+
+import Util form './Blade.js';
+```
+
+##API File
+获取数据类型
+```
+
+```
+检测浏览器，脚本运行环境
+```
+```
+函数节流
+```
+```
+函数去抖
+```
+```
+获取元素大小
+```
+```
+获取元素位置
+```
+
+```
+
+
 
 
 
