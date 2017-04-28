@@ -1,6 +1,5 @@
 (function(){
    
-
     var util = {
 
         /**
@@ -160,7 +159,7 @@
          *   @param {Function} callback
          *   @param {number} 
         */
-        throttle: function(){
+        throttle: function(callback, number){
 
         },
         /** 
@@ -171,9 +170,10 @@
          *   @param {boolean} immediate
          *   @return 
          */
-        bebounce: function(){
-
+        bebounce: function(callback, time, immediate){
+            
         }
     }
+
 
 })();
