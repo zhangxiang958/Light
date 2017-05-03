@@ -77,12 +77,12 @@
         getElementPosition: function(ele){
 
             var left, right, top, bottom;
-            
+            var boundingRect = ele.getBoundingclientRect();
             return {
-                left: ele.getBoundingclientRect().left + ele.offsetLeft,
-                right: right,
-                top: top,
-                bottom: bottom
+                left: boundingRect.left + document.documentElement.pageXOffset,
+                top: boundingRect.top + document.documentElement.pageXOffset,
+                width: boundingRect.width,
+                height: boundingRect.height
             }
 
         },
