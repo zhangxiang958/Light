@@ -23,7 +23,12 @@ console.log(Util.getDataType(data));  //Object, Array, String, Number, null, und
 ```
 检测浏览器，脚本运行环境
 ```
+import Util form './Blade.js';
 
+Util.getBrowerInfor();
+
+//是否是移动端
+Util.isMobile();
 ```
 获取元素大小
 ```
@@ -39,24 +44,26 @@ console.log(Util.getDOMPosition(ele));
 ```
 
 绑定事件
-···
+```
 Util.addHandler('click', ele, callback, true);
-···
+```
 
 移除事件
-···
+```
 Util.removeHandler('click', ele, callback);
-···
+```
 
 函数节流
 ```
+import Util form './Blade.js';
 
+Util.throttle(this, callback, [arg1, arg2], 500, 2000);
 ```
 函数去抖
 ```
 import Util form './Blade.js';
 
-Util.debounce(fn, 100, true);
+Util.debounce(this, callback, [arg1, arg2, agr3], 500, false);
 ```
 
 

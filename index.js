@@ -77,9 +77,9 @@
         getElementPosition: function(ele){
 
             var left, right, top, bottom;
-
+            
             return {
-                left: left,
+                left: ele.getBoundingclientRect().left + ele.offsetLeft,
                 right: right,
                 top: top,
                 bottom: bottom
@@ -156,22 +156,63 @@
         /**
          *   函数节流
          *   应用场景：避免函数频繁地执行， 比如 resize，scroll 等
+         *   @param {Object}  context
          *   @param {Function} callback
-         *   @param {number} 
+         *   @param {Array}  args
+         *   @param {number}  delay
+         *   @param {number} duration
         */
-        throttle: function(callback, number){
+        throttle: function(context, callback, args, delay, duration){
+
+            var start = new Date(), timer = null;
+
+            return function(){
+                var now = new Date();
+                clearTimeout(timer);
+
+                if((now - start) < duration) {
+                    timer = setTimeout(function(){
+
+                        callback.apply(context, args);
+                    }, delay);
+                } else {
+                    callback.apply(context, args);
+
+                    start = now;
+                }
+            }
 
         },
         /** 
          *   函数抖动
          *   应用场景：等待一段事件之后执行某个函数，只希望执行一次，比如重复提交或者实时查询
+         *   @param {Object}  context
          *   @param {Function} callback
+         *   @param {Array}  args
          *   @param {number} time
          *   @param {boolean} immediate
          *   @return 
          */
-        bebounce: function(callback, time, immediate){
+        bebounce: function(context, callback, args, time, immediate){
             
+            var timer = null;
+
+            return function(){
+                var callnow = immediate && !timer;
+                clearTimeout(timer);
+
+                timer = setTimeout(function(){
+                    timer = null;
+                    if(!immediate) {
+
+                        callback.apply(context, args);
+                    }
+                }, time);
+
+                if(callnow) {
+                    callback.apply(context, args);
+                } 
+            }
         }
     }
 
