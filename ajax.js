@@ -103,6 +103,7 @@
                 case 4: //DONE
                     if(xhr.status >= 200 && xhr.status < 300 || xhr.status == 304) {
                         var data = xhr.responseText;
+                        (typeof data === 'string') && (data = JSON.parse(data));
                         success(data);
                     } else {
                         fail(xhr.response);
@@ -159,12 +160,11 @@
 
             var scriptNode = document.createElement('script');
             scriptNode.type = 'text/javascript';
-            console.log(callbackName);
-            console.log(data);
 
             window[callbackName] = function(res){
                 head.removeChild(scriptNode);
                 delete window[callbackName];
+                (typeof res === 'string') && (res = JSON.parse(res));
                 resolve(res);
             }
 
