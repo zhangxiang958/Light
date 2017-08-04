@@ -20,7 +20,7 @@
           return;
         }
         className.trim ? className = className.trim() : className = className.replace(/(^\s*)|(\s*$)/g, '');
-        return element.contain(className);
+        return element.classList.contain(className);
       }
     } else {
       return function(element, className){
