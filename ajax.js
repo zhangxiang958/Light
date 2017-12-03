@@ -10,6 +10,7 @@
         }
 
     }(this, function(){
+        // 工具函数
         var Util = {
             objectToQuery: function(data){
                 var queryArr = [], encode = encodeURIComponent, value, key, i, len;
@@ -55,9 +56,26 @@
                 }
 
                 return uuid.join('');
+            },
+            escape: window.escape,
+            plainEscape: function(text){
+                //将空白与 = 和 \ 符号, 全部转化为 \前缀
+                return text.replace(/[\s\=\\]/g, "\\$&");
             }
         };
 
+        if (!XMLHttpRequest.prototype.sendAsBinary) {
+            XMLHttpRequest.prototype.sendAsBinary = function(sData) {
+                var nBytes = sData.length, ui8Data = new Uint8Array(nBytes);
+                for (var nIdx = 0; nIdx < nBytes; nIdx++) {
+                ui8Data[nIdx] = sData.charCodeAt(nIdx) & 0xff;
+                }
+                /* send as ArrayBufferView...: */
+                this.send(ui8Data);
+                /* ...or as ArrayBuffer (legacy)...: this.send(ui8Data.buffer); */
+            };
+        }
+        
         function Request(){
 
         };
@@ -89,9 +107,56 @@
             }
         };
 
-        Request.prototype.sendRequest = function(method, url, data, success, fail, isAsync){
+        Request.prototype.lego = function(key, value, dataType){
+            if(value instanceof File) {
+                if(dataType === 'multipart\/form-data') {
+                    return this.handleFile(value);
+                } else {
+                    return dataType === 'text\/plain' ?
+                    Util.plainEscape(key) + '=' + Util.plainEscape(value.name)
+                    :
+                    Util.escape(key) + '=' + Util.escape(value)
+                }
+            } else {
+                return (
+                    dataType === 'multipart\/form-data' ?
+                    "Content-Disposition: form-data; name=\"" + key + "\"\r\n\r\n" + value + "\r\n"
+                    :
+                    dataType === 'text\/plain' ?
+                    Util.plainEscape(key) + '=' + Util.plainEscape(value.name)
+                    :
+                    Util.escape(key) + '=' + Util.escape(value)
+                    )
+            }
+        }
 
+        Request.prototype.handleData = function(data, opts){
+            var result = [];
+            if(data instanceof FormData) {
+                for(var value of data.entries()) {
+                    var key = value[0];
+                    var singleValue = value[1];
+                    result.push(this.lego(key, singleValue));
+                }
+            } else {
+                Object.keys(data).forEach(function(item, idx){
+                    var key = item;
+                    var singleValue = data[key];
+                    result.push(this.lego(key, value));
+                });
+            }
+        }
+
+        Request.prototype.handleFile = function(file){
+            return "Content-Disposition: form-data; name=\"" +
+                    file.name + "\"; filename=\"" + file.name +
+                    "\"\r\nContent-Type: " + file.type + "\r\n\r\n"
+        }
+
+        Request.prototype.sendRequest = function(method, url, opts, success, fail, isAsync){
             var xhr = this.createXHR();
+            var data = opts.data;
+            var sep;
             xhr.onreadystatechange = function(){
                 switch(xhr.readyState) {
                     case 1: // OPENED
@@ -114,52 +179,80 @@
                 }
             }
 
+            if(opts.progress && Object.prototype.toString.call(opts.progress) === '[object Function]') {
+                xhr.upload.onprogress = opts.process
+            }
+
+            if(opts.withCredentials) {
+                xhr.withCredentials = true;
+            }
+
             xhr.open(method, url, true);
-            xhr.overrideMimeType('application/json');
-            (method.toLowerCase() === 'post' || method.toLowerCase() === 'put' || method.toLowerCase() === 'delete') && (xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded'));
+            if(method.toLowerCase() === 'post') {
+                if(opts.type === 'multipart\/form-data') {
+                    var boundary = "----------------------------" + Date.now().toString(16);
+                    xhr.setRequestHeader("Content-Type", "multipart\/form-data; boundary=" + boundary);
+                    xhr.sendAsBinary('--' + boundary + '\r\n' +
+                                    data.join("--" + boundary + "\r\n") + "--" + boundary + "--\r\n");
+                    return;
+                } else {
+                    spt = type === 'text\/plain' ? '\r\n' : '&';
+                    data = this.handleData(data).join(spt);
+                }
+            }
+            xhr.setRequestHeader('Content-Type', opts.type);
             xhr.send(data);
         }
 
-        Request.prototype.get = function(url, data){
+        Request.prototype.get = function(url, opts){
             var that = this;
-            data = Util.objectToQuery(data);
+            var data = Util.objectToQuery(opts.data);
             data.length > 0 && (url = url.indexOf('?') >= 0 ? (url + '&' + data) : (url + '?' + data));
             return new Promise(function(resolve, reject) {
                 that.sendRequest('get', url, null, resolve, reject, true);
             });
         }
 
-        Request.prototype.post = function(url, data){
+        Request.prototype.post = function(url, opts){
             var that = this;
-            data = JSON.stringify(data);
+            var data = JSON.stringify(opts.data);
             return new Promise(function(resolve, reject){
                 that.sendRequest('post', url, data, resolve, reject, true);
             });
         }
 
-        Request.prototype.put = function(url, data){
+        Request.prototype.form = function(url, opts){
             var that = this;
-            data = JSON.stringify(data);
+            var data = opts.data;
+            return new Promise(function(resolve, reject){
+                that.sendRequest('post', url, data, resolve, reject, true);
+            });
+        }
+
+        Request.prototype.put = function(url, opts){
+            var that = this;
+            var data = JSON.stringify(opts.data);
             return new Promise(function(resolve, reject){
                 that.sendRequest('put', url, data, resolve, reject, true);
             });
         }
 
-        Request.prototype.delete = function(url, data){
+        Request.prototype.delete = function(url, opts){
             var that = this;
-            data = JSON.stringify(data);
+            var data = JSON.stringify(opts.data);
             return new Prommise(function(resolve, reject){
                 that.sendRequest('delete', url, data, resolve, reject, true);
             });
         }
 
-        Request.prototype.jsonp = function(url, data){
+        Request.prototype.jsonp = function(url, opts){
 
             var head = document.getElementsByTagName('head')[0];
 
             return new Promise(function(resolve, reject){
 
                 var callbackName = 'jsonp_' + Util.guid(8, 16);
+                var data = opts.data;
                 data.callback = callbackName;
                 data = Util.objectToQuery(data);
 
