@@ -68,16 +68,17 @@
             XMLHttpRequest.prototype.sendAsBinary = function(sData) {
                 var nBytes = sData.length, ui8Data = new Uint8Array(nBytes);
                 for (var nIdx = 0; nIdx < nBytes; nIdx++) {
-                ui8Data[nIdx] = sData.charCodeAt(nIdx) & 0xff;
+                    ui8Data[nIdx] = sData.charCodeAt(nIdx) & 0xff;
                 }
                 /* send as ArrayBufferView...: */
+                console.log(ui8Data);
                 this.send(ui8Data);
                 /* ...or as ArrayBuffer (legacy)...: this.send(ui8Data.buffer); */
             };
         }
         
         function Request(){
-
+            this.fileCount = 0;
         };
 
         Request.prototype.createXHR = function(){
@@ -107,6 +108,25 @@
             }
         };
 
+        Request.prototype.loadFile = function(file, idx, result){
+            var ctx = this;
+            var fileReader = new FileReader();
+            fileReader.idx = idx;
+            fileReader.owner = this;
+            fileReader.onload = function(found){
+                result[idx] += found.target.result + "\r\n";
+                ctx.fileCount--;
+                ctx.sendRequestWithFile(ctx.xhr, result, ctx.boundary);
+            }
+            fileReader.readAsBinaryString(file);
+        }
+
+        Request.prototype.handleFile = function(file){
+            return "Content-Disposition: form-data; name=\"" +
+                    file.name + "\"; filename=\"" + file.name +
+                    "\"\r\nContent-Type: " + file.type + "\r\n\r\n";
+        }
+
         Request.prototype.lego = function(key, value, dataType){
             if(value instanceof File) {
                 if(dataType === 'multipart\/form-data') {
@@ -132,30 +152,41 @@
 
         Request.prototype.handleData = function(data, opts){
             var result = [];
+            var ctx = this;
             if(data instanceof FormData) {
-                for(var value of data.entries()) {
-                    var key = value[0];
-                    var singleValue = value[1];
-                    result.push(this.lego(key, singleValue));
+                for(var line of data.entries()) {
+                    var key = line[0];
+                    var value = line[1];
+                    var idx = result.length;
+                    result.push(ctx.lego(key, value, opts.type));
+                    if(value instanceof File) {
+                        this.fileCount++;
+                        this.loadFile(value, idx, result);
+                    }
                 }
             } else {
                 Object.keys(data).forEach(function(item, idx){
                     var key = item;
-                    var singleValue = data[key];
-                    result.push(this.lego(key, value));
+                    var value = data[key];
+                    result.push(ctx.lego(key, value));
                 });
             }
+            return result;
         }
 
-        Request.prototype.handleFile = function(file){
-            return "Content-Disposition: form-data; name=\"" +
-                    file.name + "\"; filename=\"" + file.name +
-                    "\"\r\nContent-Type: " + file.type + "\r\n\r\n"
+        Request.prototype.sendRequestWithFile = function(ctx, data, boundary){
+            console.log('data', data);
+            if(this.fileCount > 0) {
+                return;
+            }
+            ctx.sendAsBinary('--' + boundary + '\r\n' +
+                                    data.join("--" + boundary + "\r\n") + "--" + boundary + "--\r\n");
         }
 
         Request.prototype.sendRequest = function(method, url, opts, success, fail, isAsync){
             var xhr = this.createXHR();
             var data = opts.data;
+            var contentType = opts.type;
             var sep;
             xhr.onreadystatechange = function(){
                 switch(xhr.readyState) {
@@ -168,8 +199,13 @@
                     case 4: //DONE
                         if(xhr.status >= 200 && xhr.status < 300 || xhr.status == 304) {
                             var data = xhr.responseText;
-                            if(typeof data == 'string'){
-                                data = JSON.parse(data);
+                            var responseHeader = xhr.getResponseHeader('Content-Type');
+                            if(typeof data == 'string') {
+                                if(responseHeader.indexOf('text/html') >= 0 || responseHeader.indexOf('text/plain') >= 0) {
+                                    data = data;
+                                } else {
+                                    data = JSON.parse(data);
+                                }
                             }
                             success(data);
                         } else {
@@ -189,59 +225,59 @@
 
             xhr.open(method, url, true);
             if(method.toLowerCase() === 'post') {
+                contentType = contentType ||  'application/x-www-form-urlencoded';
                 if(opts.type === 'multipart\/form-data') {
                     var boundary = "----------------------------" + Date.now().toString(16);
+                    this.boundary = boundary;
+                    this.xhr = xhr;
                     xhr.setRequestHeader("Content-Type", "multipart\/form-data; boundary=" + boundary);
-                    xhr.sendAsBinary('--' + boundary + '\r\n' +
-                                    data.join("--" + boundary + "\r\n") + "--" + boundary + "--\r\n");
+                    data = this.handleData(data, opts);
+                    this.sendRequestWithFile(xhr, data, boundary);
                     return;
                 } else {
-                    spt = type === 'text\/plain' ? '\r\n' : '&';
-                    data = this.handleData(data).join(spt);
+                    spt = opts.type === 'text\/plain' ? '\r\n' : '&';
+                    data = this.handleData(data, opts).join(spt);
                 }
             }
-            xhr.setRequestHeader('Content-Type', opts.type);
+            xhr.setRequestHeader('Content-Type', contentType || 'text/plain');
             xhr.send(data);
         }
 
         Request.prototype.get = function(url, opts){
-            var that = this;
             var data = Util.objectToQuery(opts.data);
             data.length > 0 && (url = url.indexOf('?') >= 0 ? (url + '&' + data) : (url + '?' + data));
             return new Promise(function(resolve, reject) {
-                that.sendRequest('get', url, null, resolve, reject, true);
+                var request = new Request();
+                request.sendRequest('get', url, opts, resolve, reject, true);
             });
         }
 
         Request.prototype.post = function(url, opts){
-            var that = this;
-            var data = JSON.stringify(opts.data);
             return new Promise(function(resolve, reject){
-                that.sendRequest('post', url, data, resolve, reject, true);
+                var request = new Request();
+                request.sendRequest('post', url, opts, resolve, reject, true);
             });
         }
 
-        Request.prototype.form = function(url, opts){
-            var that = this;
+        Request.prototype.upload = function(url, opts){
             var data = opts.data;
             return new Promise(function(resolve, reject){
-                that.sendRequest('post', url, data, resolve, reject, true);
+                var request = new Request();
+                request.sendRequest('post', url, data, resolve, reject, true);
             });
         }
 
         Request.prototype.put = function(url, opts){
-            var that = this;
-            var data = JSON.stringify(opts.data);
             return new Promise(function(resolve, reject){
-                that.sendRequest('put', url, data, resolve, reject, true);
+                var request = new Request();
+                request.sendRequest('put', url, opts, resolve, reject, true);
             });
         }
 
         Request.prototype.delete = function(url, opts){
-            var that = this;
-            var data = JSON.stringify(opts.data);
             return new Prommise(function(resolve, reject){
-                that.sendRequest('delete', url, data, resolve, reject, true);
+                var request = new Request();
+                request.sendRequest('delete', url, opts, resolve, reject, true);
             });
         }
 
